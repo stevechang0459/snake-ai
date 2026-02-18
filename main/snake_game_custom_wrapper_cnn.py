@@ -12,11 +12,13 @@ class SnakeEnv(gym.Env):
         self.game.reset()
 
         self.silent_mode = silent_mode
+        self.obs_resolution = 84
+        # self.obs_resolution = board_size * 8
 
         self.action_space = gym.spaces.Discrete(4) # 0: UP, 1: LEFT, 2: RIGHT, 3: DOWN
         self.observation_space = gym.spaces.Box(
             low=0, high=255,
-            shape=(84, 84, 3),
+            shape=(self.obs_resolution, self.obs_resolution, 3),
             dtype=np.uint8
         )
 
@@ -171,7 +173,7 @@ class SnakeEnv(gym.Env):
 
         # Enlarge the observation to 84x84
         # obs = np.repeat(np.repeat(obs, 7, axis=0), 7, axis=1)
-        obs = cv2.resize(obs, (84, 84), interpolation=cv2.INTER_NEAREST)
+        obs = cv2.resize(obs, (self.obs_resolution, self.obs_resolution), interpolation=cv2.INTER_NEAREST)
 
         return obs
 

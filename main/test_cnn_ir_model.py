@@ -46,6 +46,14 @@ def main():
     # Initialize OpenVINO Core
     core = ov.Core()
     devices = core.available_devices
+    print("Available OpenVINO Devices")
+    for device in devices:
+        # Query the full name (model name) of the device
+        device_full_name = core.get_property(device, "FULL_DEVICE_NAME")
+        print(f"Device: {device:10} | Name: {device_full_name}")
+
+    # device_name = "CPU"
+    # device_name = "GPU" if "GPU" in devices else "CPU"
     device_name = "NPU" if "NPU" in devices else "CPU"
     print(f"Targeting device: {device_name}")
 

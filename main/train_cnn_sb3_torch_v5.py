@@ -112,6 +112,7 @@ LOG_DIR = "logs"
 N_STEPS = 2048
 VER_NUM = "5"
 BOARD_SIZE = 21
+LOAD_MODEL = True
 
 os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -163,43 +164,49 @@ def main():
         features_extractor_kwargs=dict(features_dim=512),
     )
 
-    # Instantiate PPO agent
-    if torch.backends.mps.is_available():
-        print(f"Using Device: MPS (Mac Metal)")
-        lr_schedule = linear_schedule(5e-4, 2.5e-6)
-        clip_range_schedule = linear_schedule(0.150, 0.025)
-        model = MaskablePPO(
-            "CnnPolicy",
-            env,
-            device="mps",
-            verbose=1,
-            n_steps=2048,
-            batch_size=512*8,
-            n_epochs=4,
-            gamma=0.94,
-            learning_rate=lr_schedule,
-            clip_range=clip_range_schedule,
-            tensorboard_log=LOG_DIR
-        )
+    if LOAD_MODEL:
+        MODEL_PATH = r"PPO_Snake_Game_21x21_CNN_v5_20260219_175719/ppo_snake_11000000_steps"
+        model = MaskablePPO.load(MODEL_PATH, env=env, tensorboard_log=LOG_DIR)
+        start_time = "20260219_175719"
+        steps = 11000000
     else:
-        print(f"Using Device: CUDA (NVIDIA)")
-        lr_schedule = linear_schedule(2.5e-4, 2.5e-6)
-        clip_range_schedule = linear_schedule(0.150, 0.025)
-        model = MaskablePPO(
-            "CnnPolicy",
-            env,
-            policy_kwargs=policy_kwargs,
-            device="cuda",
-            verbose=1,
-            n_steps=N_STEPS,
-            batch_size=N_STEPS // 2,
-            n_epochs=4,
-            gamma=0.95,
-            ent_coef=0.01,
-            learning_rate=lr_schedule,
-            clip_range=clip_range_schedule,
-            tensorboard_log=LOG_DIR
-        )
+        # Instantiate PPO agent
+        if torch.backends.mps.is_available():
+            print(f"Using Device: MPS (Mac Metal)")
+            lr_schedule = linear_schedule(5e-4, 2.5e-6)
+            clip_range_schedule = linear_schedule(0.150, 0.025)
+            model = MaskablePPO(
+                "CnnPolicy",
+                env,
+                device="mps",
+                verbose=1,
+                n_steps=2048,
+                batch_size=512*8,
+                n_epochs=4,
+                gamma=0.94,
+                learning_rate=lr_schedule,
+                clip_range=clip_range_schedule,
+                tensorboard_log=LOG_DIR
+            )
+        else:
+            print(f"Using Device: CUDA (NVIDIA)")
+            lr_schedule = linear_schedule(2.5e-4, 2.5e-6)
+            clip_range_schedule = linear_schedule(0.150, 0.025)
+            model = MaskablePPO(
+                "CnnPolicy",
+                env,
+                policy_kwargs=policy_kwargs,
+                device="cuda",
+                verbose=1,
+                n_steps=N_STEPS,
+                batch_size=N_STEPS // 2,
+                n_epochs=4,
+                gamma=0.95,
+                ent_coef=0.01,
+                learning_rate=lr_schedule,
+                clip_range=clip_range_schedule,
+                tensorboard_log=LOG_DIR
+            )
 
     # Set the save directory
     if torch.backends.mps.is_available():
@@ -229,12 +236,23 @@ def main():
     sys.stdout = DualLogger(log_file_path)
 
     try:
-        model.learn(
-            total_timesteps=int(100000000),
-            # Add both callbacks to the list
-            callback=[checkpoint_callback, stop_train_callback],
-            tb_log_name=f"PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN_v{VER_NUM}_{start_time}"
-        )
+        if LOAD_MODEL:
+            model.learn(
+                total_timesteps=int(100000000 - steps),
+                reset_num_timesteps=False,
+                # Add both callbacks to the list
+                callback=[checkpoint_callback, stop_train_callback],
+                # callback=[checkpoint_callback],
+                tb_log_name=f"PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN_v{VER_NUM}_{start_time}"
+            )
+        else:
+            model.learn(
+                total_timesteps=int(100000000),
+                # Add both callbacks to the list
+                callback=[checkpoint_callback, stop_train_callback],
+                # callback=[checkpoint_callback],
+                tb_log_name=f"PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN_v{VER_NUM}_{start_time}"
+            )
 
         # Save the final model (Executed if training finishes naturally or is stopped by callback)
         final_model_path = os.path.join(save_dir, f"PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN_final_v{VER_NUM}_{start_time}.zip")

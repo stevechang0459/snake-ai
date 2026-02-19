@@ -110,7 +110,8 @@ else:
     NUM_ENV = 32
 LOG_DIR = "logs"
 N_STEPS = 2048
-VERSION = "v5"
+VER_NUM = "5"
+BOARD_SIZE = 21
 
 os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -133,7 +134,7 @@ def linear_schedule(initial_value, final_value=0.0):
 def make_env(seed=0):
     def _init():
         # Note: board_size is set to 21 here as per your request
-        env = SnakeEnv(seed=seed, board_size=21, limit_step=True)
+        env = SnakeEnv(seed=seed, board_size=BOARD_SIZE, limit_step=True)
         env = ActionMasker(env, SnakeEnv.get_action_mask)
         env = Monitor(env)
         env.seed(seed)
@@ -204,13 +205,13 @@ def main():
     if torch.backends.mps.is_available():
         save_dir = "trained_models_cnn_mps"
     else:
-        save_dir = f"trained_models_cnn_{VERSION}_{start_time}"
+        save_dir = f"PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN_v{VER_NUM}_{start_time}"
     os.makedirs(save_dir, exist_ok=True)
 
     # Callbacks
     # 1. Checkpoint Callback: Save model periodically
     checkpoint_interval = 15625 # checkpoint_interval * num_envs = total_steps_per_checkpoint
-    checkpoint_callback = CheckpointCallback(save_freq=checkpoint_interval, save_path=save_dir, name_prefix="ppo_snake")
+    checkpoint_callback = CheckpointCallback(save_freq=checkpoint_interval, save_path=save_dir, name_prefix=f"PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN")
 
     # 2. Keyboard Stop Callback: Stop training safely by pressing 'q'
     stop_train_callback = KeyboardStopCallback(key='q')
@@ -232,18 +233,17 @@ def main():
             total_timesteps=int(100000000),
             # Add both callbacks to the list
             callback=[checkpoint_callback, stop_train_callback],
-            tb_log_name=f"PPO_{VERSION}_{start_time}"
+            tb_log_name=f"PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN_v{VER_NUM}_{start_time}"
         )
 
         # Save the final model (Executed if training finishes naturally or is stopped by callback)
-        final_model_path = os.path.join(save_dir, f"ppo_snake_final_{VERSION}_{start_time}.zip")
+        final_model_path = os.path.join(save_dir, f"PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN_final_v{VER_NUM}_{start_time}.zip")
         model.save(final_model_path)
         print(f"Training finished. Final model saved to {final_model_path}")
 
     except KeyboardInterrupt:
         # Fallback for Ctrl+C (though 'q' is preferred for stability)
         print("\nTraining interrupted by user (Ctrl+C). Saving current model...")
-        model.save(os.path.join(save_dir, f"ppo_snake_interrupted_{VERSION}_{start_time}.zip"))
 
     except Exception as e:
         print(f"\nAn error occurred during training: {e}")

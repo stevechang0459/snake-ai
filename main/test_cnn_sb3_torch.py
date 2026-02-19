@@ -21,15 +21,17 @@ warnings.filterwarnings("ignore", category=FutureWarning, module="stable_baselin
 NUM_ENVS = 1
 FPS = 30                # Display speed
 RENDER = True
+RENDER_FEATURE_MAP = False
 
 NUM_EPISODE = 10
 ROUND_DELAY = 5         # unit: sec
 HUGE_NEGATIVE = -1e8
 
+
 if torch.backends.mps.is_available():
     MODEL_PATH = r"trained_models_cnn_mps/ppo_snake_final"
 else:
-    MODEL_PATH = r"PPO_Snake_Game_21x21_CNN_v5_20260219_175719/ppo_snake_9000000_steps"
+    MODEL_PATH = r"PPO_Snake_Game_21x21_CNN_v5_20260219_175719/PPO_Snake_Game_21x21_CNN_14500000_steps"
 
 activations = {}
 
@@ -55,6 +57,16 @@ def responsive_wait(ms):
         pygame.display.flip()
         clock.tick(FPS)
 
+def tile_direct(features, rows, cols):
+    _, H, W = features.shape
+    # Reshape to split dimensions -> Transpose to swap rows and height -> Reshape again to flatten into a 2D large image
+    return features.reshape(rows, cols, H, W).transpose(0, 2, 1, 3).reshape(rows * H, cols * W)
+
+def tile_with_padding(features, rows, cols, padding=1):
+    padded = np.pad(features, ((0, 0), (padding, padding), (padding, padding)), mode='constant', constant_values=np.nan)
+    _, new_H, new_W = padded.shape
+    return padded.reshape(rows, cols, new_H, new_W).transpose(0, 2, 1, 3).reshape(rows * new_H, cols * new_W)
+
 def main():
     seed = random.randint(0, 1e9)
     print(f"Using seed = {seed} for testing.")
@@ -77,91 +89,80 @@ def main():
     max_score = 0
     clock = pygame.time.Clock()
 
-    # ================= 視窗初始化 =================
-    import matplotlib as mpl
-    mpl.rcParams['toolbar'] = 'None'
-    plt.ion()
+    if RENDER_FEATURE_MAP:
+        # ================= Window Initialization =================
+        mpl.rcParams['toolbar'] = 'None'
+        plt.ion()
 
-    invisible_color = '#010101'
+        invisible_color = '#010101'
 
-    # --- 視窗一：Conv1 (4x8 = 32 Channels) ---
-    fig1, axes1 = plt.subplots(4, 8, figsize=(10, 5), facecolor=invisible_color)
-    # --- 視窗二：Conv2 (8x8 = 64 Channels) ---
-    fig2, axes2 = plt.subplots(8, 8, figsize=(8, 8), facecolor=invisible_color)
-    # --- 視窗三：Conv3 (8x8 = 64 Channels，解析度 9x9) ---
-    fig3, axes3 = plt.subplots(8, 8, figsize=(7, 7), facecolor=invisible_color)
-    # --- 視窗四：Conv4 (8x16 = 128 Channels，解析度 7x7) ---
-    fig4, axes4 = plt.subplots(8, 16, figsize=(6, 6), facecolor=invisible_color)
+        # Each window only needs 1 clean canvas (1x1 subplot)
+        fig1, ax1 = plt.subplots(figsize=(10, 5), facecolor=invisible_color)
+        fig2, ax2 = plt.subplots(figsize=(8, 8), facecolor=invisible_color)
+        fig3, ax3 = plt.subplots(figsize=(7, 7), facecolor=invisible_color)
+        fig4, ax4 = plt.subplots(figsize=(16, 8), facecolor=invisible_color)
 
-    def setup_floating_window(fig, title):
-        try:
-            window = fig.canvas.manager.window
-            window.overrideredirect(True)
-            window.attributes('-transparentcolor', invisible_color)
-            window.attributes('-topmost', True) # 讓它永遠漂浮在最上層
+        def setup_floating_window(fig, title):
+            try:
+                window = fig.canvas.manager.window
+                window.overrideredirect(True)
+                window.attributes('-transparentcolor', invisible_color)
+                window.attributes('-topmost', True) # Keep it always floating on top
 
-            # 拖曳邏輯
-            drag_state = {'dragging': False, 'x': 0, 'y': 0}
-            def on_press(event):
-                if event.button == 1:
-                    drag_state['dragging'] = True
-                    drag_state['x'] = window.winfo_pointerx() - window.winfo_rootx()
-                    drag_state['y'] = window.winfo_pointery() - window.winfo_rooty()
-            def on_release(event):
-                if event.button == 1: drag_state['dragging'] = False
-            def on_motion(event):
-                if drag_state['dragging']:
-                    window.geometry(f"+{window.winfo_pointerx()-drag_state['x']}+{window.winfo_pointery()-drag_state['y']}")
+                # Dragging logic
+                drag_state = {'dragging': False, 'x': 0, 'y': 0}
+                def on_press(event):
+                    if event.button == 1:
+                        drag_state['dragging'] = True
+                        drag_state['x'] = window.winfo_pointerx() - window.winfo_rootx()
+                        drag_state['y'] = window.winfo_pointery() - window.winfo_rooty()
+                def on_release(event):
+                    if event.button == 1: drag_state['dragging'] = False
+                def on_motion(event):
+                    if drag_state['dragging']:
+                        window.geometry(f"+{window.winfo_pointerx()-drag_state['x']}+{window.winfo_pointery()-drag_state['y']}")
 
-            fig.canvas.mpl_connect('button_press_event', on_press)
-            fig.canvas.mpl_connect('button_release_event', on_release)
-            fig.canvas.mpl_connect('motion_notify_event', on_motion)
-        except: pass
+                fig.canvas.mpl_connect('button_press_event', on_press)
+                fig.canvas.mpl_connect('button_release_event', on_release)
+                fig.canvas.mpl_connect('motion_notify_event', on_motion)
+            except: pass
 
-    setup_floating_window(fig1, "Conv1")
-    setup_floating_window(fig2, "Conv2")
-    setup_floating_window(fig3, "Conv3")
-    setup_floating_window(fig4, "Conv4")
+        setup_floating_window(fig1, "Conv1")
+        setup_floating_window(fig2, "Conv2")
+        setup_floating_window(fig3, "Conv3")
+        setup_floating_window(fig4, "Conv4")
 
-    # 準備圖片物件
-    ims1 = [ax.imshow(np.zeros((42, 42)), cmap='viridis') for ax in axes1.flat]
-    for ax in axes1.flat: ax.axis('off')
+        # my_cmap = mpl.colormaps['viridis'].copy()
+        # my_cmap.set_bad(color='#555555')
 
-    ims2 = [ax.imshow(np.zeros((20, 20)), cmap='viridis') for ax in axes2.flat]
-    for ax in axes2.flat: ax.axis('off')
+        # Prepare 4 single image objects (insert a 1x1 matrix as placeholder first, dynamically replace with the full image later)
+        im1 = ax1.imshow(np.zeros((1, 1)), cmap='viridis', aspect='auto')
+        im2 = ax2.imshow(np.zeros((1, 1)), cmap='viridis', aspect='auto')
+        im3 = ax3.imshow(np.zeros((1, 1)), cmap='viridis', aspect='auto')
+        im4 = ax4.imshow(np.zeros((1, 1)), cmap='viridis', aspect='auto')
 
-    ims3 = [ax.imshow(np.zeros((9, 9)), cmap='viridis') for ax in axes3.flat]
-    for ax in axes3.flat: ax.axis('off')
+        for ax in [ax1, ax2, ax3, ax4]:
+            ax.axis('off')
 
-    ims4 = [ax.imshow(np.zeros((7, 7)), cmap='viridis') for ax in axes4.flat]
-    for ax in axes4.flat: ax.axis('off')
+        ax1.set_title("Conv1 (32 ch)", color='white', fontsize=12, pad=5)
+        ax2.set_title("Conv2 (64 ch)", color='white', fontsize=12, pad=5)
+        ax3.set_title("Conv3 (64 ch)", color='white', fontsize=12, pad=5)
+        ax4.set_title("Conv4 (128 ch)", color='white', fontsize=12, pad=5)
 
-    # fig.subplots_adjust(0.01, 0.01, 0.99, 0.99, 0.01, 0.01)
-    fig1.subplots_adjust(left=0.01, right=0.92, bottom=0.01, top=0.99, wspace=0.01, hspace=0.01)
-    fig2.subplots_adjust(left=0.01, right=0.92, bottom=0.01, top=0.99, wspace=0.01, hspace=0.01)
-    fig3.subplots_adjust(left=0.01, right=0.92, bottom=0.01, top=0.99, wspace=0.01, hspace=0.01)
-    fig4.subplots_adjust(left=0.01, right=0.92, bottom=0.01, top=0.99, wspace=0.01, hspace=0.01)
+        for fig in [fig1, fig2, fig3, fig4]:
+            fig.subplots_adjust(left=0.01, right=0.92, bottom=0.01, top=0.93)
 
-    # Colorbar 建議保留背景，不然字會看不清楚
-    cbar1_ax = fig1.add_axes([0.94, 0.05, 0.02, 0.9])
-    cbar1 = fig1.colorbar(ims1[0], cax=cbar1_ax)
-    cbar1_ax.set_facecolor('black') # 讓 Colorbar 有個黑底比較好讀數值
-    cbar1_ax.yaxis.set_tick_params(color='white', labelcolor='white')
+        def create_cbar(fig, im):
+            cbar_ax = fig.add_axes([0.94, 0.05, 0.02, 0.9])
+            cbar = fig.colorbar(im, cax=cbar_ax)
+            cbar_ax.set_facecolor('black') # Set a black background for the colorbar to keep values readable
+            cbar_ax.yaxis.set_tick_params(color='white', labelcolor='white')
+            return cbar
 
-    cbar2_ax = fig2.add_axes([0.94, 0.05, 0.02, 0.9])
-    cbar2 = fig2.colorbar(ims2[0], cax=cbar2_ax)
-    cbar2_ax.set_facecolor('black')
-    cbar2_ax.yaxis.set_tick_params(color='white', labelcolor='white')
-
-    cbar3_ax = fig3.add_axes([0.94, 0.05, 0.02, 0.9])
-    cbar3 = fig3.colorbar(ims3[0], cax=cbar3_ax)
-    cbar3_ax.set_facecolor('black')
-    cbar3_ax.yaxis.set_tick_params(color='white', labelcolor='white')
-
-    cbar4_ax = fig4.add_axes([0.94, 0.05, 0.02, 0.9])
-    cbar4 = fig4.colorbar(ims4[0], cax=cbar4_ax)
-    cbar4_ax.set_facecolor('black')
-    cbar4_ax.yaxis.set_tick_params(color='white', labelcolor='white')
+        cbar1 = create_cbar(fig1, im1)
+        cbar2 = create_cbar(fig2, im2)
+        cbar3 = create_cbar(fig3, im3)
+        cbar4 = create_cbar(fig4, im4)
 
     for episode in range(NUM_EPISODE):
         obs = env.reset()
@@ -183,62 +184,56 @@ def main():
             obs, reward, done, info = env.step(action)
             num_step += 1
 
-            # ================= 更新視窗資料 =================
-            # if 'Conv1_42x42' in activations and 'Conv2_20x20' in activations:
-            if 'Conv1_42x42' in activations and 'Conv2_20x20' in activations and \
-                'Conv3_9x9' in activations and 'Conv4_7x7' in activations:
-                fmap_conv1 = activations['Conv1_42x42'][0]
-                fmap_conv2 = activations['Conv2_20x20'][0]
-                fmap_conv3 = activations['Conv3_9x9'][0]
-                fmap_conv4 = activations['Conv4_7x7'][0]
+            if RENDER_FEATURE_MAP:
+                # ================= Update Window Data =================
+                if 'Conv1_42x42' in activations and 'Conv2_20x20' in activations and \
+                    'Conv3_9x9' in activations and 'Conv4_7x7' in activations:
 
-                # 各自獨立計算最高與最低活化值
-                global_min1 = fmap_conv1.min()
-                global_max1 = fmap_conv1.max() + 1e-8
+                    # Extract feature maps
+                    f1 = activations['Conv1_42x42'][0]
+                    f2 = activations['Conv2_20x20'][0]
+                    f3 = activations['Conv3_9x9'][0]
+                    f4 = activations['Conv4_7x7'][0]
 
-                global_min2 = fmap_conv2.min()
-                global_max2 = fmap_conv2.max() + 1e-8
+                    # Tile using NumPy (Layout: 4x8, 8x8, 8x8, 8x16)
+                    vmin1, vmax1 = f1.min(), f1.max() + 1e-8
+                    vmin2, vmax2 = f2.min(), f2.max() + 1e-8
+                    vmin3, vmax3 = f3.min(), f3.max() + 1e-8
+                    vmin4, vmax4 = f4.min(), f4.max() + 1e-8
 
-                global_min3 = fmap_conv3.min()
-                global_max3 = fmap_conv3.max() + 1e-8
+                    PADDING = 1
+                    grid1 = tile_with_padding(f1, 4, 8, padding=PADDING)
+                    grid2 = tile_with_padding(f2, 8, 8, padding=PADDING)
+                    grid3 = tile_with_padding(f3, 8, 8, padding=PADDING)
+                    grid4 = tile_with_padding(f4, 8, 16, padding=PADDING)
 
-                global_min4 = fmap_conv4.min()
-                global_max4 = fmap_conv4.max() + 1e-8
+                    # Calculate Max/Min for each large image and update the single canvas
+                    im1.set_data(grid1)
+                    im1.set_clim(vmin=vmin1, vmax=vmax1)
 
-                # 更新 Conv1
-                for i, im in enumerate(ims1):
-                    im.set_data(fmap_conv1[i])
-                    im.set_clim(vmin=global_min1, vmax=global_max1)
+                    im2.set_data(grid2)
+                    im2.set_clim(vmin=vmin2, vmax=vmax2)
 
-                # 更新 Conv2
-                for i, im in enumerate(ims2):
-                    im.set_data(fmap_conv2[i])
-                    im.set_clim(vmin=global_min2, vmax=global_max2)
+                    im3.set_data(grid3)
+                    im3.set_clim(vmin=vmin3, vmax=vmax3)
 
-                # 更新 Conv3
-                for i, im in enumerate(ims3):
-                    im.set_data(fmap_conv3[i])
-                    im.set_clim(vmin=global_min3, vmax=global_max3)
+                    im4.set_data(grid4)
+                    im4.set_clim(vmin=vmin4, vmax=vmax4)
 
-                # 更新 Conv4
-                for i, im in enumerate(ims4):
-                    im.set_data(fmap_conv4[i])
-                    im.set_clim(vmin=global_min4, vmax=global_max4)
+                    # Synchronize Colorbar and refresh windows
+                    cbar1.update_normal(im1)
+                    cbar2.update_normal(im2)
+                    cbar3.update_normal(im3)
+                    cbar4.update_normal(im4)
 
-                cbar1.update_normal(ims1[0])
-                cbar2.update_normal(ims2[0])
-                cbar3.update_normal(ims3[0])
-                cbar4.update_normal(ims4[0])
-
-                # 刷新視窗
-                fig1.canvas.draw_idle()
-                fig1.canvas.flush_events()
-                fig2.canvas.draw_idle()
-                fig2.canvas.flush_events()
-                fig3.canvas.draw_idle()
-                fig3.canvas.flush_events()
-                fig4.canvas.draw_idle()
-                fig4.canvas.flush_events()
+                    fig1.canvas.draw_idle()
+                    fig1.canvas.flush_events()
+                    fig2.canvas.draw_idle()
+                    fig2.canvas.flush_events()
+                    fig3.canvas.draw_idle()
+                    fig3.canvas.flush_events()
+                    fig4.canvas.draw_idle()
+                    fig4.canvas.flush_events()
 
             if RENDER:
                 current_fps = clock.get_fps()

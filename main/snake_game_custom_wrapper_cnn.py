@@ -67,13 +67,16 @@ class SnakeEnv(gym.Env):
         # Game Over
         if self.done: # Snake bumps into wall or itself. Episode is over.
             # Game Over penalty is based on snake size.
-            reward = - math.pow(self.max_growth, (self.grid_size - info["snake_size"]) / self.max_growth) # (-max_growth, -1)
-            reward = reward * 0.1
+            # reward = - math.pow(self.max_growth, (self.grid_size - info["snake_size"]) / self.max_growth) # (-max_growth, -1)
+            # reward = reward * 0.1
+            base_penalty = 1.0
+            penalty_scale = info["snake_size"] / self.grid_size
+            reward = - (base_penalty + 4.0 * penalty_scale)
             return obs, reward, self.done, info
 
         # Food Eaten
         elif info["food_obtained"]: # Food eaten. Reward boost on snake size.
-            reward = info["snake_size"] / self.grid_size
+            reward = max(info["snake_size"] / self.grid_size, self.board_size / info["snake_size"])
             self.reward_step_counter = 0 # Reset reward step counter
 
         else:
@@ -90,8 +93,8 @@ class SnakeEnv(gym.Env):
             reward = step_penalty + navigation_reward
             reward = reward * 0.1
 
-        # max_score: 72 + 14.1 = 86.1
-        # min_score: -14.1
+        # max_score ~= 286.0 + 438 * 0.1 + 0.5 = 330.3
+        # min_score ~= ((-0.1 / 3) * 0.1 * 882) + -(1.0 + 4.0 * (3/441)) = -3.97
 
         return obs, reward, self.done, info
 

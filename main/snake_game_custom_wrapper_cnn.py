@@ -12,8 +12,8 @@ class SnakeEnv(gym.Env):
         self.game.reset()
 
         self.silent_mode = silent_mode
-        self.obs_resolution = 84
-        # self.obs_resolution = board_size * 8
+        # self.obs_resolution = 84
+        self.obs_resolution = board_size * 8
 
         self.action_space = gym.spaces.Discrete(4) # 0: UP, 1: LEFT, 2: RIGHT, 3: DOWN
         self.observation_space = gym.spaces.Box(

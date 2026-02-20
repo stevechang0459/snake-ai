@@ -33,7 +33,7 @@ N_STEPS = 2048
 BATCH_SIZE = 2048
 N_EPOCHS = 4
 GAMMA = 0.995
-ENT_COEF = 0.001
+ENT_COEF = 0.01
 INITIAL_LR = 2.5e-4
 FINAL_LR = 2.5e-6
 INITIAL_CR = 0.150
@@ -220,12 +220,12 @@ def main():
     policy_kwargs = dict(
         features_extractor_class=CustomCNN,
         features_extractor_kwargs=dict(features_dim=512),
-        # net_arch=dict(pi=[256, 256], vf=[256, 256])
+        net_arch=dict(pi=[256, 256], vf=[256, 256])
     )
 
     if LOAD_MODEL:
-        start_time = "20260219_175719"
-        steps = 82500000
+        start_time = "20260220_162010"
+        steps = 500000
         MODEL_PATH = rf"PPO_Snake_Game_21x21_CNN_v{VER_NUM}_{start_time}/PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN_v{VER_NUM}_{steps}_steps"
 
         custom_lr_schedule = linear_schedule(INITIAL_LR, FINAL_LR)

@@ -31,7 +31,7 @@ HUGE_NEGATIVE = -1e8
 if torch.backends.mps.is_available():
     MODEL_PATH = r"trained_models_cnn_mps/ppo_snake_final"
 else:
-    MODEL_PATH = r"PPO_Snake_Game_21x21_CNN_v5_20260219_175719/PPO_Snake_Game_21x21_CNN_v5_89000000_steps"
+    MODEL_PATH = r"C:\Users\steve\OneDrive\Workspace\Github\Python\snake-ai\main\PPO_Snake_Game_21x21_CNN_v6_20260224_082348\PPO_Snake_Game_21x21_CNN_v6_final_20260224_082348.zip"
 
 activations = {}
 

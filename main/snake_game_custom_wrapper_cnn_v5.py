@@ -71,15 +71,12 @@ class SnakeEnv(gym.Env):
             # reward = reward * 0.1
             base_penalty = 1.0
             penalty_scale = info["snake_size"] / self.grid_size
-            # reward = - (base_penalty + 4.0 * penalty_scale)
-            reward = - (base_penalty + 4.0 * penalty_scale) ** 2
+            reward = - (base_penalty + 4.0 * penalty_scale)
             return obs, reward, self.done, info
 
         # Food Eaten
         elif info["food_obtained"]: # Food eaten. Reward boost on snake size.
-            # reward = max(info["snake_size"] / self.grid_size, self.board_size / info["snake_size"])
-            # reward = 1.0 + (info["snake_size"] / self.grid_size)
-            reward = (1.0 + (info["snake_size"] / self.grid_size)) ** 2
+            reward = max(info["snake_size"] / self.grid_size, self.board_size / info["snake_size"])
             self.reward_step_counter = 0 # Reset reward step counter
 
         else:

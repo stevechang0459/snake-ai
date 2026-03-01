@@ -14,13 +14,15 @@ from sb3_contrib.common.wrappers import ActionMasker
 from snake_game_custom_wrapper_cnn import SnakeEnv
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
+from stable_baselines3.common.logger import HumanOutputFormat
 
 # ======================================
 # Global Configuration
 # ======================================
 
-VER_NUM = "6"
+VER_NUM = "5"
 LOAD_MODEL = False
+NEW_TRAINING = True
 
 if torch.backends.mps.is_available():
     NUM_ENV = 32 * 2
@@ -114,6 +116,10 @@ class TrainingSetupCallback(BaseCallback):
             # Switch stdout to DualLogger
             sys.stdout = self.dual_logger
 
+            for out_fmt in self.logger.output_formats:
+                if isinstance(out_fmt, HumanOutputFormat):
+                    out_fmt.file = self.dual_logger
+
             if self.verbose > 0:
                 print(f"Starting training... Logs will be saved to: {log_file_path}")
                 print("Press and hold 'q' to stop training...")
@@ -206,8 +212,6 @@ def make_env(seed=0):
 # ======================================
 
 def main():
-    start_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-
     # Generate a list of unique random seeds for each environment
     seed_set = set()
     while len(seed_set) < NUM_ENV:
@@ -225,15 +229,18 @@ def main():
 
     if LOAD_MODEL:
         start_time = "20260219_175719"
-        steps = 82500000
-        MODEL_PATH = rf"PPO_Snake_Game_21x21_CNN_v{VER_NUM}_{start_time}/PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN_v{VER_NUM}_{steps}_steps"
+        steps = 100000000
+        # MODEL_PATH = rf"PPO_Snake_Game_21x21_CNN_v{VER_NUM}_{start_time}/PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN_v{VER_NUM}_{steps}_steps"
+        MODEL_PATH = rf"PPO_Snake_Game_21x21_CNN_v{VER_NUM}_{start_time}/PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN_v{VER_NUM}_final_{start_time}"
 
         custom_lr_schedule = linear_schedule(INITIAL_LR, FINAL_LR)
         custom_clip_range_schedule = linear_schedule(INITIAL_CR, FINAL_CR)
         custom_objects = {
+            "n_steps": N_STEPS,
+            "batch_size": BATCH_SIZE,
+            "n_epochs": N_EPOCHS,
             "gamma": GAMMA,
             "ent_coef": ENT_COEF,
-            "batch_size": N_STEPS,
             "learning_rate": custom_lr_schedule,
             "clip_range": custom_clip_range_schedule,
         }
@@ -286,17 +293,22 @@ def main():
                 tensorboard_log=LOG_DIR
             )
 
+    if NEW_TRAINING:
+        start_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    proj_name = f"PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN_v{VER_NUM}"
+
     # Set the save directory
     if torch.backends.mps.is_available():
         save_dir = "trained_models_cnn_mps"
     else:
-        save_dir = f"PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN_v{VER_NUM}_{start_time}"
+        save_dir = f"{proj_name}_{start_time}"
     os.makedirs(save_dir, exist_ok=True)
 
     # Callbacks
     # Checkpoint Callback: Save model periodically
     checkpoint_interval = 15625
-    checkpoint_callback = CheckpointCallback(save_freq=checkpoint_interval, save_path=save_dir, name_prefix=f"PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN_v{VER_NUM}")
+    checkpoint_callback = CheckpointCallback(save_freq=checkpoint_interval, save_path=save_dir, name_prefix=proj_name)
 
     # Keyboard Stop Callback: Stop training safely by pressing 'q'
     stop_train_callback = KeyboardStopCallback(key='q')
@@ -306,22 +318,22 @@ def main():
 
     # Execute Training
     try:
-        if LOAD_MODEL:
+        if not NEW_TRAINING and LOAD_MODEL:
             model.learn(
                 total_timesteps=int(TARGET_STEPS - steps),
                 reset_num_timesteps=False,
                 callback=[setup_callback, checkpoint_callback, stop_train_callback],
-                tb_log_name=f"PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN_v{VER_NUM}_{start_time}"
+                tb_log_name=f"{proj_name}_{start_time}"
             )
         else:
             model.learn(
                 total_timesteps=int(TARGET_STEPS),
                 callback=[setup_callback, checkpoint_callback, stop_train_callback],
-                tb_log_name=f"PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN_v{VER_NUM}_{start_time}"
+                tb_log_name=f"{proj_name}_{start_time}"
             )
 
         # Save the final model (Executed if training finishes naturally or is stopped by callback)
-        final_model_path = os.path.join(save_dir, f"PPO_Snake_Game_{BOARD_SIZE}x{BOARD_SIZE}_CNN_final_v{VER_NUM}_{start_time}.zip")
+        final_model_path = os.path.join(save_dir, f"{proj_name}_final_{start_time}.zip")
         model.save(final_model_path)
         print(f"Training finished. Final model saved to {final_model_path}")
 

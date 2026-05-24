@@ -31,7 +31,10 @@ HUGE_NEGATIVE = -1e8
 if torch.backends.mps.is_available():
     MODEL_PATH = r"trained_models_cnn_mps/ppo_snake_final"
 else:
-    MODEL_PATH = r"C:\Users\steve\OneDrive\Workspace\Github\Python\snake-ai\main\PPO_Snake_Game_21x21_CNN_v6_20260224_082348\PPO_Snake_Game_21x21_CNN_v6_final_20260224_082348.zip"
+    board_size = 12
+    MODEL_PATH = r"trained_models_cnn_v3_20260217_012656/ppo_snake_final_v3_20260217_012656"
+    # board_size = 21
+    # MODEL_PATH = r"PPO_Snake_Game_21x21_CNN_v6_20260224_082348/PPO_Snake_Game_21x21_CNN_v6_final_20260224_082348.zip"
 
 activations = {}
 
@@ -72,7 +75,7 @@ def main():
     print(f"Using seed = {seed} for testing.")
 
     # Initialize Vectorized Environment
-    env = SnakeEnv(seed=seed, board_size=21, limit_step=True, silent_mode=not RENDER)
+    env = SnakeEnv(seed=seed, board_size=board_size, limit_step=True, silent_mode=not RENDER)
 
     # Load the trained model
     model = MaskablePPO.load(MODEL_PATH)
